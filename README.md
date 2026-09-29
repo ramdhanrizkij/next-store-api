@@ -16,12 +16,14 @@ A high-performance backend RESTful API built with **Go (Golang)** using a **Feat
 - [Getting Started & Development Setup](#-getting-started--development-setup)
   - [1. Clone Repository](#1-clone-repository)
   - [2. Environment Configuration](#2-environment-configuration)
-  - [3. Start PostgreSQL Database](#3-start-postgresql-database)
+  - [3. Start PostgreSQL and Redis Services](#3-start-postgresql-and-redis-services)
   - [4. Run Database Migrations (Goose)](#4-run-database-migrations-goose)
   - [5. Run Database Seeders (Optional)](#5-run-database-seeders-optional)
   - [6. Run the API Server](#6-run-the-api-server)
+  - [7. Run the Background Worker (Asynq)](#7-run-the-background-worker-asynq)
 - [Database Migrations with Goose](#-database-migrations-with-goose)
 - [Database Seeding](#-database-seeding)
+- [Background Worker & Task Processing](#-background-worker--task-processing)
 - [Makefile Commands](#-makefile-commands)
 - [API Endpoints Reference](#-api-endpoints-reference)
   - [Standard API Response Format](#standard-api-response-format)
@@ -35,13 +37,15 @@ A high-performance backend RESTful API built with **Go (Golang)** using a **Feat
 ## 🚀 Key Features
 
 - **Feature-Modular Clean Architecture**: Domain features (`auth`, `user`, `health`) are strictly segregated into feature modules, each divided into `domain`, `application`, `infrastructure`, and `delivery` layers.
+- **Asynchronous Background Worker (Asynq & Redis)**: Distributed, reliable background task processing with Redis-backed queue persistence for reliable asynchronous tasks like transactional email sending.
+- **Email Verification Flow**: New user accounts are registered in an unverified state (`is_verified = false`). An activation email with a secure token is enqueued to the background worker. Only verified accounts are permitted to authenticate.
 - **Database Migrations with Goose**: Declarative SQL migrations with versioning, rollback support (`-- +goose Up` / `-- +goose Down`), and status inspection.
-- **Authentication & Security**: Secure user registration, password hashing with **bcrypt**, and stateless authorization using **JSON Web Tokens (JWT)**.
+- **Authentication & Security**: Secure user registration, password hashing with **bcrypt**, email activation enforcement, and stateless authorization using **JSON Web Tokens (JWT)**.
 - **Database Connection Pooling**: PostgreSQL connection pool configured via the high-performance **pgx/v5** driver using Go's standard `database/sql` interface.
-- **Graceful Shutdown**: Safely drains active HTTP requests and closes database connections upon receiving OS termination signals (`SIGINT`, `SIGTERM`).
+- **Graceful Shutdown**: Safely drains active HTTP requests and closes database and worker connections upon receiving OS termination signals (`SIGINT`, `SIGTERM`).
 - **Standardized API Responses**: Predictable JSON response envelopes across all endpoints for both success and error responses.
 - **Pagination & Input Validation**: Reusable helpers for offset-based pagination and validation error mapping via `go-playground/validator`.
-- **Docker Compose Integration**: Out-of-the-box local database container with healthcheck and persistent volumes.
+- **Docker Compose Integration**: Out-of-the-box local database and Redis containers with healthchecks and persistent volumes.
 
 ---
 
@@ -51,6 +55,8 @@ A high-performance backend RESTful API built with **Go (Golang)** using a **Feat
 | :--- | :--- | :--- |
 | **[Go](https://go.dev/)** | `1.22+` / `1.27` | Core programming language offering high throughput, memory safety, and first-class concurrency. |
 | **[Gin Web Framework](https://github.com/gin-gonic/gin)** | `v1.12.0` | Ultra-fast HTTP web framework with flexible routing, JSON binding, and middleware chain. |
+| **[Asynq](https://github.com/hibiken/asynq)** | `v0.25.1` | Simple, reliable, and efficient distributed task queue in Go backed by Redis. |
+| **[Redis](https://redis.io/)** | `7-alpine` | High-performance in-memory data store used as the persistence layer for background queues. |
 | **[Goose](https://github.com/pressly/goose)** | `v3.28.0` | Production-grade database migration tool supporting raw SQL scripts and version control. |
 | **[pgx](https://github.com/jackc/pgx/v5)** | `v5.11.0` | High-performance pure-Go PostgreSQL driver and toolkit integrating smoothly with `database/sql`. |
 | **[golang-jwt](https://github.com/golang-jwt/jwt/v5)** | `v5.3.1` | Robust JWT implementation for signing and verifying HMAC-SHA256 authentication tokens. |
@@ -79,14 +85,17 @@ my-project/
 ├── cmd/
 │   ├── api/
 │   │   └── main.go                     # Application entry point, DI, and graceful shutdown
-│   └── seeder/
-│       └── main.go                     # Database seeder CLI entry point
+│   ├── seeder/
+│   │   └── main.go                     # Database seeder CLI entry point
+│   └── worker/
+│       └── main.go                     # Asynq background worker daemon
 │
 ├── internal/                           # Private code not accessible by external Go modules
 │   ├── config/                         # Environment parsing and typed app config
 │   ├── database/                       # PostgreSQL connection pool initializer
 │   ├── server/                         # HTTP server lifecycle and Gin router configuration
 │   ├── middleware/                     # Middleware (JWT Auth, CORS, Request Logger, Recovery)
+│   ├── worker/                         # Asynq task definitions, distributor, and processor
 │   ├── seeder/                         # Database seeders (Registry, UserSeeder)
 │   ├── shared/                         # Shared utilities across modules
 │   │   ├── response/                   # Standardized JSON response envelope
@@ -191,11 +200,17 @@ DB_CONN_MAX_LIFETIME=15
 # JWT Authentication
 JWT_SECRET=supersecretjwtkeychangeinproduction
 JWT_EXPIRATION_HOURS=24
+
+# Redis Configuration (For Asynq Worker)
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
 ```
 
-### 3. Start PostgreSQL Database
+### 3. Start PostgreSQL and Redis Services
 
-Launch the PostgreSQL container using Docker Compose:
+Launch the PostgreSQL and Redis containers using Docker Compose:
 
 ```bash
 make docker-up
@@ -203,7 +218,7 @@ make docker-up
 docker compose up -d
 ```
 
-Verify that the database container is healthy:
+Verify that both containers are running and healthy:
 
 ```bash
 docker compose ps
@@ -249,6 +264,23 @@ Upon successful startup, the server output will display:
 Starting next-store-api in development mode...
 Database connection established successfully
 HTTP Server is listening on port 8080
+```
+
+### 7. Run the Background Worker (Asynq)
+
+In a separate terminal, start the asynchronous worker daemon to process background tasks (e.g. dispatching verification emails):
+
+```bash
+make worker
+# Or directly via Go CLI:
+go run ./cmd/worker
+```
+
+Upon successful startup, the worker output will display:
+
+```text
+Starting next-store-api background worker...
+[WORKER] Asynq worker server started listening for tasks...
 ```
 
 ---
@@ -310,6 +342,28 @@ Seeders are **idempotent** (`ON CONFLICT (email) DO NOTHING`), meaning they can 
 
 ---
 
+## 👷 Background Worker & Task Processing
+
+Next Store API utilizes **[Asynq](https://github.com/hibiken/asynq)** powered by **Redis** for distributed, reliable, and decoupled background job execution.
+
+### How It Works
+
+1. When a user registers (`POST /api/v1/auth/register`), the API creates an inactive user record (`is_verified = false`) and an email verification token.
+2. The `AuthService` delegates task dispatch to `TaskDistributor`, which enqueues a `task:send_email_verification` payload into Redis.
+3. The standalone background worker daemon (`cmd/worker`) consumes tasks from the Redis queue.
+4. The worker processes the task via `Mailer` interface (currently formatted to dispatch logs in development, and easily swappable with SMTP or third-party providers such as Resend/SendGrid).
+5. If the worker is temporarily offline, tasks remain safely persisted in Redis until the worker restarts.
+
+### Running the Worker
+
+```bash
+make worker
+# Or directly:
+go run ./cmd/worker
+```
+
+---
+
 ## ⌨️ Makefile Commands
 
 A comprehensive suite of shortcuts is available via `make`:
@@ -319,6 +373,7 @@ A comprehensive suite of shortcuts is available via `make`:
 | `make run` / `make dev` | Run the application from source code |
 | `make build` | Compile the application binary into `./bin/app` |
 | `make start` | Build and run the compiled binary |
+| `make worker` | Run the background worker daemon for async tasks |
 | `make test` | Run all unit and integration tests |
 | `make test-cover` | Run tests with coverage profile and open HTML report |
 | `make lint` | Run `golangci-lint` static code analysis |
@@ -326,7 +381,7 @@ A comprehensive suite of shortcuts is available via `make`:
 | `make vet` | Examine Go source code for suspicious constructs using `go vet` |
 | `make tidy` | Download missing dependencies and clean up `go.mod` |
 | `make clean` | Remove the `./bin` directory and coverage artifacts |
-| `make docker-up` | Start the PostgreSQL container in the background |
+| `make docker-up` | Start PostgreSQL & Redis containers in the background |
 | `make docker-down` | Stop and remove the Docker containers |
 | `make docker-logs` | Follow real-time logs from Docker containers |
 | `make migrate-up` | Apply pending Goose migrations to PostgreSQL |
@@ -407,6 +462,7 @@ Base path: `/api/v1/auth`
 
 #### 1. Register User
 - **Endpoint**: `POST /api/v1/auth/register`
+- **Description**: Registers a new user in an unverified state (`is_verified: false`) and triggers an asynchronous task to send an activation email.
 - **Request Body**:
 ```json
 {
@@ -419,25 +475,44 @@ Base path: `/api/v1/auth`
 ```json
 {
   "success": true,
-  "message": "User registered successfully",
+  "message": "User registered successfully. Please verify your email.",
   "data": {
     "user": {
       "id": "1e15fa5c-197e-40e1-bbcb-e80ea057a627",
       "name": "John Doe",
       "email": "john@example.com",
       "role": "user",
+      "is_verified": false,
       "created_at": "2026-09-29T12:00:00Z",
       "updated_at": "2026-09-29T12:00:00Z"
     },
-    "access_token": "eyJhbGciOiJIUzI1Ni...",
-    "token_type": "Bearer",
-    "expires_at": "2026-09-30T12:00:00Z"
+    "message": "Registration successful. Please check your email to verify and activate your account."
   }
 }
 ```
 
-#### 2. Login User
+#### 2. Verify Email
+- **Endpoint**: `GET /api/v1/auth/verify-email?token=<token>` or `POST /api/v1/auth/verify-email`
+- **Description**: Verifies user account using the secure token received via email and sets `is_verified = true`.
+- **Query Parameter (GET)**: `?token=32e4d9c...`
+- **Request Body (POST)**:
+```json
+{
+  "token": "32e4d9c026fc6e282beee9386348ef53..."
+}
+```
+- **Response (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "Email successfully verified. Your account is now active.",
+  "data": null
+}
+```
+
+#### 3. Login User
 - **Endpoint**: `POST /api/v1/auth/login`
+- **Description**: Authenticates user and returns JWT token. Only verified users can log in.
 - **Request Body**:
 ```json
 {
@@ -445,7 +520,7 @@ Base path: `/api/v1/auth`
   "password": "password123"
 }
 ```
-- **Response (200 OK)**:
+- **Response (200 OK - Verified Account)**:
 ```json
 {
   "success": true,
@@ -456,12 +531,23 @@ Base path: `/api/v1/auth`
       "name": "John Doe",
       "email": "john@example.com",
       "role": "user",
+      "is_verified": true,
       "created_at": "2026-09-29T12:00:00Z",
       "updated_at": "2026-09-29T12:00:00Z"
     },
     "access_token": "eyJhbGciOiJIUzI1Ni...",
     "token_type": "Bearer",
     "expires_at": "2026-09-30T12:00:00Z"
+  }
+}
+```
+- **Response (403 Forbidden - Unverified Account)**:
+```json
+{
+  "success": false,
+  "message": "Your email address is not verified yet. Please check your inbox to activate your account.",
+  "errors": {
+    "code": "EMAIL_NOT_VERIFIED"
   }
 }
 ```

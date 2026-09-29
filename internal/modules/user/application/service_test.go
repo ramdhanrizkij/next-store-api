@@ -59,6 +59,15 @@ func (m *mockUserRepo) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+func (m *mockUserRepo) SetVerified(ctx context.Context, id string) error {
+	u, exists := m.users[id]
+	if !exists {
+		return appErrors.ErrNotFound
+	}
+	u.IsVerified = true
+	return nil
+}
+
 func TestUserService_GetByID(t *testing.T) {
 	repo := newMockUserRepo()
 	svc := application.NewUserService(repo)

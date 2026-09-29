@@ -9,4 +9,5 @@ type UserRepository interface {
 	FindAll(ctx context.Context, limit, offset int) ([]*User, int64, error)
 	Update(ctx context.Context, user *User) error
 	Delete(ctx context.Context, id string) error
+	SetVerified(ctx context.Context, id string) error
 }

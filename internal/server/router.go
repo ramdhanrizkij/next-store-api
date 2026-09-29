@@ -4,6 +4,7 @@ import (
 	"database/sql"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hibiken/asynq"
 	"github.com/ramdhanrizkij/next-store-api/internal/config"
 	"github.com/ramdhanrizkij/next-store-api/internal/middleware"
 	authApp "github.com/ramdhanrizkij/next-store-api/internal/modules/auth/application"
@@ -13,6 +14,7 @@ import (
 	userApp "github.com/ramdhanrizkij/next-store-api/internal/modules/user/application"
 	userHttp "github.com/ramdhanrizkij/next-store-api/internal/modules/user/delivery/http"
 	userInfra "github.com/ramdhanrizkij/next-store-api/internal/modules/user/infrastructure"
+	"github.com/ramdhanrizkij/next-store-api/internal/worker"
 )
 
 func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
@@ -39,8 +41,23 @@ func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
 		userRepo := userInfra.NewUserPostgresRepository(db)
 		authRepo := authInfra.NewAuthPostgresRepository(db)
 
+		// Queue / Worker Task Distributor
+		redisOpt := asynq.RedisClientOpt{
+			Addr:     cfg.Redis.Addr(),
+			Password: cfg.Redis.Password,
+			DB:       cfg.Redis.DB,
+		}
+		taskDistributor := worker.NewRedisTaskDistributor(redisOpt)
+
 		userService := userApp.NewUserService(userRepo)
-		authService := authApp.NewAuthService(userRepo, authRepo, cfg.JWT.Secret, cfg.JWT.ExpirationHours)
+		authService := authApp.NewAuthService(
+			userRepo,
+			authRepo,
+			taskDistributor,
+			cfg.App.URL,
+			cfg.JWT.Secret,
+			cfg.JWT.ExpirationHours,
+		)
 
 		userHandler := userHttp.NewUserHandler(userService)
 		authHandler := authHttp.NewAuthHandler(authService)

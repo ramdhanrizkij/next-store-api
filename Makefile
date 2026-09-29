@@ -1,6 +1,7 @@
 APP_NAME := app
 CMD_PATH := ./cmd/api
 SEEDER_PATH := ./cmd/seeder
+WORKER_PATH := ./cmd/worker
 BUILD_DIR := ./bin
 MIGRATIONS_DIR := ./migrations
 
@@ -23,13 +24,17 @@ GOOSE := $(shell which goose 2>/dev/null || which $(shell go env GOPATH)/bin/goo
 
 
 .PHONY: all run build start test test-cover fmt vet lint tidy clean docker-up docker-down docker-logs \
-	migrate-up migrate-down migrate-status migrate-reset migrate-create seed db-info help
+	migrate-up migrate-down migrate-status migrate-reset migrate-create seed worker db-info help
 
 all: help
 
 ## Run application
 run:
 	go run $(CMD_PATH)
+
+## Run background worker
+worker:
+	go run $(WORKER_PATH)
 
 ## Build application
 build:
@@ -143,4 +148,5 @@ help:
 	@echo "  make migrate-reset  - Rollback all Goose migrations"
 	@echo "  make migrate-create - Create a new migration file (e.g. make migrate-create name=add_items)"
 	@echo "  make seed           - Run database seeders"
+	@echo "  make worker         - Run background worker (Asynq)"
 	@echo "  make db-info        - Display database configuration loaded from .env"

@@ -43,8 +43,8 @@ func (s *userSeeder) Seed(ctx context.Context, db *sql.DB) error {
 	}
 
 	query := `
-		INSERT INTO users (id, name, email, password, role, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO users (id, name, email, password, role, is_verified, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (email) DO NOTHING
 	`
 
@@ -61,6 +61,7 @@ func (s *userSeeder) Seed(ctx context.Context, db *sql.DB) error {
 			u.Email,
 			string(hashedPassword),
 			u.Role,
+			true, // Pre-verified so demo accounts can log in immediately
 			now,
 			now,
 		)

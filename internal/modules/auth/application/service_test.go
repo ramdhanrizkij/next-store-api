@@ -5,9 +5,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hibiken/asynq"
 	"github.com/ramdhanrizkij/next-store-api/internal/modules/auth/application"
 	authDomain "github.com/ramdhanrizkij/next-store-api/internal/modules/auth/domain"
 	userDomain "github.com/ramdhanrizkij/next-store-api/internal/modules/user/domain"
+	appErrors "github.com/ramdhanrizkij/next-store-api/internal/shared/errors"
+	"github.com/ramdhanrizkij/next-store-api/internal/worker"
 )
 
 type mockUserRepoForAuth struct {
@@ -54,28 +57,92 @@ func (m *mockUserRepoForAuth) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-type mockAuthRepo struct{}
+func (m *mockUserRepoForAuth) SetVerified(ctx context.Context, id string) error {
+	u, exists := m.users[id]
+	if !exists {
+		return appErrors.ErrNotFound
+	}
+	u.IsVerified = true
+	return nil
+}
+
+type mockAuthRepo struct {
+	verifications map[string]*authDomain.EmailVerification
+}
+
+func newMockAuthRepo() *mockAuthRepo {
+	return &mockAuthRepo{
+		verifications: make(map[string]*authDomain.EmailVerification),
+	}
+}
 
 func (m *mockAuthRepo) StoreSession(ctx context.Context, userID, token string, expiresAt time.Time) error {
 	return nil
 }
+
 func (m *mockAuthRepo) IsSessionValid(ctx context.Context, userID, token string) (bool, error) {
 	return true, nil
 }
+
 func (m *mockAuthRepo) RevokeSession(ctx context.Context, token string) error {
+	return nil
+}
+
+func (m *mockAuthRepo) CreateEmailVerification(ctx context.Context, v *authDomain.EmailVerification) error {
+	m.verifications[v.Token] = v
+	return nil
+}
+
+func (m *mockAuthRepo) GetEmailVerificationByToken(ctx context.Context, token string) (*authDomain.EmailVerification, error) {
+	v, exists := m.verifications[token]
+	if !exists {
+		return nil, nil
+	}
+	return v, nil
+}
+
+func (m *mockAuthRepo) MarkEmailVerificationUsed(ctx context.Context, token string) error {
+	v, exists := m.verifications[token]
+	if exists {
+		now := time.Now()
+		v.VerifiedAt = &now
+	}
 	return nil
 }
 
 var _ authDomain.AuthRepository = (*mockAuthRepo)(nil)
 
-func TestAuthService_RegisterAndLogin(t *testing.T) {
+type mockTaskDistributor struct {
+	tasks []*worker.SendEmailVerificationPayload
+}
+
+func (m *mockTaskDistributor) DistributeTaskSendEmailVerification(
+	ctx context.Context,
+	payload *worker.SendEmailVerificationPayload,
+	opts ...asynq.Option,
+) error {
+	m.tasks = append(m.tasks, payload)
+	return nil
+}
+
+func TestAuthService_RegisterVerificationAndLogin(t *testing.T) {
 	userRepo := newMockUserRepoForAuth()
-	authRepo := &mockAuthRepo{}
-	svc := application.NewAuthService(userRepo, authRepo, "testsecretkey", 24)
+	authRepo := newMockAuthRepo()
+	taskDist := &mockTaskDistributor{}
+	svc := application.NewAuthService(
+		userRepo,
+		authRepo,
+		taskDist,
+		"http://localhost:8080",
+		"testsecretkey",
+		24,
+	)
 
 	ctx := context.Background()
 
-	t.Run("Register success", func(t *testing.T) {
+	var verificationToken string
+
+	t.Run("Register success - creates unverified user and enqueues task", func(t *testing.T) {
 		req := &application.RegisterRequest{
 			Name:     "Test User",
 			Email:    "test@example.com",
@@ -86,11 +153,22 @@ func TestAuthService_RegisterAndLogin(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error registering: %v", err)
 		}
-		if res.AccessToken == "" {
-			t.Error("expected non-empty access token")
+		if res.User == nil {
+			t.Fatal("expected non-nil user response")
 		}
 		if res.User.Email != "test@example.com" {
 			t.Errorf("expected email test@example.com, got %s", res.User.Email)
+		}
+		if res.User.IsVerified {
+			t.Error("expected user to not be verified yet")
+		}
+
+		if len(taskDist.tasks) != 1 {
+			t.Fatalf("expected 1 task distributed, got %d", len(taskDist.tasks))
+		}
+		verificationToken = taskDist.tasks[0].Token
+		if verificationToken == "" {
+			t.Fatal("expected non-empty verification token in task payload")
 		}
 	})
 
@@ -107,7 +185,46 @@ func TestAuthService_RegisterAndLogin(t *testing.T) {
 		}
 	})
 
-	t.Run("Login success", func(t *testing.T) {
+	t.Run("Login unverified account fails", func(t *testing.T) {
+		req := &application.LoginRequest{
+			Email:    "test@example.com",
+			Password: "securepassword",
+		}
+
+		_, err := svc.Login(ctx, req)
+		if err == nil {
+			t.Fatal("expected error for unverified account login, got nil")
+		}
+	})
+
+	t.Run("VerifyEmail with invalid token fails", func(t *testing.T) {
+		err := svc.VerifyEmail(ctx, &application.VerifyEmailRequest{
+			Token: "invalid-token",
+		})
+		if err == nil {
+			t.Fatal("expected error for invalid token, got nil")
+		}
+	})
+
+	t.Run("VerifyEmail with valid token succeeds", func(t *testing.T) {
+		err := svc.VerifyEmail(ctx, &application.VerifyEmailRequest{
+			Token: verificationToken,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error verifying email: %v", err)
+		}
+	})
+
+	t.Run("VerifyEmail already verified token fails", func(t *testing.T) {
+		err := svc.VerifyEmail(ctx, &application.VerifyEmailRequest{
+			Token: verificationToken,
+		})
+		if err == nil {
+			t.Fatal("expected error for already verified token, got nil")
+		}
+	})
+
+	t.Run("Login success after verification", func(t *testing.T) {
 		req := &application.LoginRequest{
 			Email:    "test@example.com",
 			Password: "securepassword",

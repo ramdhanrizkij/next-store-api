@@ -7,12 +7,13 @@ import (
 )
 
 type UserResponse struct {
-	ID        string      `json:"id"`
-	Name      string      `json:"name"`
-	Email     string      `json:"email"`
-	Role      domain.Role `json:"role"`
-	CreatedAt time.Time   `json:"created_at"`
-	UpdatedAt time.Time   `json:"updated_at"`
+	ID         string      `json:"id"`
+	Name       string      `json:"name"`
+	Email      string      `json:"email"`
+	Role       domain.Role `json:"role"`
+	IsVerified bool        `json:"is_verified"`
+	CreatedAt  time.Time   `json:"created_at"`
+	UpdatedAt  time.Time   `json:"updated_at"`
 }
 
 type UpdateUserRequest struct {
@@ -24,12 +25,13 @@ func ToUserResponse(user *domain.User) *UserResponse {
 		return nil
 	}
 	return &UserResponse{
-		ID:        user.ID,
-		Name:      user.Name,
-		Email:     user.Email,
-		Role:      user.Role,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
+		ID:         user.ID,
+		Name:       user.Name,
+		Email:      user.Email,
+		Role:       user.Role,
+		IsVerified: user.IsVerified,
+		CreatedAt:  user.CreatedAt,
+		UpdatedAt:  user.UpdatedAt,
 	}
 }
 
