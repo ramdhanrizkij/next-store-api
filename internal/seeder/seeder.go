@@ -2,22 +2,23 @@ package seeder
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
+
+	"gorm.io/gorm"
 )
 
 type Seeder interface {
 	Name() string
-	Seed(ctx context.Context, db *sql.DB) error
+	Seed(ctx context.Context, db *gorm.DB) error
 }
 
 type Registry struct {
-	db      *sql.DB
+	db      *gorm.DB
 	seeders []Seeder
 }
 
-func NewRegistry(db *sql.DB) *Registry {
+func NewRegistry(db *gorm.DB) *Registry {
 	r := &Registry{
 		db:      db,
 		seeders: make([]Seeder, 0),

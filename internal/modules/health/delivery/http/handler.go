@@ -2,19 +2,19 @@ package http
 
 import (
 	"context"
-	"database/sql"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ramdhanrizkij/next-store-api/internal/shared/response"
+	"gorm.io/gorm"
 )
 
 type HealthHandler struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
-func NewHealthHandler(db *sql.DB) *HealthHandler {
+func NewHealthHandler(db *gorm.DB) *HealthHandler {
 	return &HealthHandler{db: db}
 }
 
@@ -30,7 +30,8 @@ func (h *HealthHandler) HealthCheck(c *gin.Context) {
 
 	dbStatus := "connected"
 	if h.db != nil {
-		if err := h.db.PingContext(ctx); err != nil {
+		sqlDB, err := h.db.DB()
+		if err != nil || sqlDB.PingContext(ctx) != nil {
 			dbStatus = "disconnected"
 		}
 	} else {

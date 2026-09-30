@@ -41,7 +41,7 @@ A high-performance backend RESTful API built with **Go (Golang)** using a **Feat
 - **Email Verification Flow**: New user accounts are registered in an unverified state (`is_verified = false`). An activation email with a secure token is enqueued to the background worker. Only verified accounts are permitted to authenticate.
 - **Database Migrations with Goose**: Declarative SQL migrations with versioning, rollback support (`-- +goose Up` / `-- +goose Down`), and status inspection.
 - **Authentication & Security**: Secure user registration, password hashing with **bcrypt**, email activation enforcement, and stateless authorization using **JSON Web Tokens (JWT)**.
-- **Database Connection Pooling**: PostgreSQL connection pool configured via the high-performance **pgx/v5** driver using Go's standard `database/sql` interface.
+- **Database Connection Pooling**: PostgreSQL connection pool configured via **GORM** (`gorm.io/gorm` and `gorm.io/driver/postgres`) with fine-tuned connection limits and lifetimes.
 - **Graceful Shutdown**: Safely drains active HTTP requests and closes database and worker connections upon receiving OS termination signals (`SIGINT`, `SIGTERM`).
 - **Standardized API Responses**: Predictable JSON response envelopes across all endpoints for both success and error responses.
 - **Pagination & Input Validation**: Reusable helpers for offset-based pagination and validation error mapping via `go-playground/validator`.
@@ -55,6 +55,7 @@ A high-performance backend RESTful API built with **Go (Golang)** using a **Feat
 | :--- | :--- | :--- |
 | **[Go](https://go.dev/)** | `1.22+` / `1.27` | Core programming language offering high throughput, memory safety, and first-class concurrency. |
 | **[Gin Web Framework](https://github.com/gin-gonic/gin)** | `v1.12.0` | Ultra-fast HTTP web framework with flexible routing, JSON binding, and middleware chain. |
+| **[GORM](https://gorm.io/)** | `v1.25.12` | Developer-friendly ORM for Go with PostgreSQL driver (`gorm.io/driver/postgres`) and connection pool management. |
 | **[Asynq](https://github.com/hibiken/asynq)** | `v0.25.1` | Simple, reliable, and efficient distributed task queue in Go backed by Redis. |
 | **[Redis](https://redis.io/)** | `7-alpine` | High-performance in-memory data store used as the persistence layer for background queues. |
 | **[Goose](https://github.com/pressly/goose)** | `v3.28.0` | Production-grade database migration tool supporting raw SQL scripts and version control. |

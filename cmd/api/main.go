@@ -31,8 +31,10 @@ func main() {
 		log.Println("[WARN] Running with limited functionality until database is available")
 	} else {
 		defer func() {
-			if err := db.Close(); err != nil {
-				log.Printf("Error closing database connection: %v", err)
+			if sqlDB, err := db.DB(); err == nil {
+				if err := sqlDB.Close(); err != nil {
+					log.Printf("Error closing database connection: %v", err)
+				}
 			}
 		}()
 		log.Println("Database connection established successfully")

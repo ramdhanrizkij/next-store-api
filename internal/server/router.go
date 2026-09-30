@@ -1,8 +1,6 @@
 package server
 
 import (
-	"database/sql"
-
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
 	"github.com/ramdhanrizkij/next-store-api/internal/config"
@@ -15,9 +13,10 @@ import (
 	userHttp "github.com/ramdhanrizkij/next-store-api/internal/modules/user/delivery/http"
 	userInfra "github.com/ramdhanrizkij/next-store-api/internal/modules/user/infrastructure"
 	"github.com/ramdhanrizkij/next-store-api/internal/worker"
+	"gorm.io/gorm"
 )
 
-func NewRouter(cfg *config.Config, db *sql.DB) *gin.Engine {
+func NewRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	if cfg.App.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
