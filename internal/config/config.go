@@ -32,10 +32,22 @@ type JWTConfig struct {
 	ExpirationHours int
 }
 
+type RedisConfig struct {
+	Host     string
+	Port     string
+	Password string
+	DB       int
+}
+
+func (r *RedisConfig) Addr() string {
+	return fmt.Sprintf("%s:%s", r.Host, r.Port)
+}
+
 type Config struct {
-	App AppConfig
-	DB  DBConfig
-	JWT JWTConfig
+	App   AppConfig
+	DB    DBConfig
+	JWT   JWTConfig
+	Redis RedisConfig
 }
 
 func (d *DBConfig) DSN() string {
@@ -70,6 +82,12 @@ func Load() (*Config, error) {
 		JWT: JWTConfig{
 			Secret:          getEnv("JWT_SECRET", "supersecretjwtkeychangeinproduction"),
 			ExpirationHours: getEnvAsInt("JWT_EXPIRATION_HOURS", 24),
+		},
+		Redis: RedisConfig{
+			Host:     getEnv("REDIS_HOST", "localhost"),
+			Port:     getEnv("REDIS_PORT", "6379"),
+			Password: getEnv("REDIS_PASSWORD", ""),
+			DB:       getEnvAsInt("REDIS_DB", 0),
 		},
 	}
 

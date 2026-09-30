@@ -7,5 +7,7 @@ func RegisterRoutes(rg *gin.RouterGroup, handler *AuthHandler) {
 	{
 		auth.POST("/register", handler.Register)
 		auth.POST("/login", handler.Login)
+		auth.GET("/verify-email", handler.VerifyEmail)
+		auth.POST("/verify-email", handler.VerifyEmail)
 	}
 }

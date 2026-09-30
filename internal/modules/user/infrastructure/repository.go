@@ -18,8 +18,8 @@ func NewUserPostgresRepository(db *sql.DB) domain.UserRepository {
 
 func (r *userPostgresRepository) Create(ctx context.Context, u *domain.User) error {
 	query := `
-		INSERT INTO users (id, name, email, password, role, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO users (id, name, email, password, role, is_verified, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
 	_, err := r.db.ExecContext(ctx, query,
 		u.ID,
@@ -27,6 +27,7 @@ func (r *userPostgresRepository) Create(ctx context.Context, u *domain.User) err
 		u.Email,
 		u.Password,
 		u.Role,
+		u.IsVerified,
 		u.CreatedAt,
 		u.UpdatedAt,
 	)
@@ -35,7 +36,7 @@ func (r *userPostgresRepository) Create(ctx context.Context, u *domain.User) err
 
 func (r *userPostgresRepository) FindByID(ctx context.Context, id string) (*domain.User, error) {
 	query := `
-		SELECT id, name, email, password, role, created_at, updated_at
+		SELECT id, name, email, password, role, is_verified, created_at, updated_at
 		FROM users
 		WHERE id = $1
 	`
@@ -48,6 +49,7 @@ func (r *userPostgresRepository) FindByID(ctx context.Context, id string) (*doma
 		&u.Email,
 		&u.Password,
 		&u.Role,
+		&u.IsVerified,
 		&u.CreatedAt,
 		&u.UpdatedAt,
 	)
@@ -63,7 +65,7 @@ func (r *userPostgresRepository) FindByID(ctx context.Context, id string) (*doma
 
 func (r *userPostgresRepository) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, name, email, password, role, created_at, updated_at
+		SELECT id, name, email, password, role, is_verified, created_at, updated_at
 		FROM users
 		WHERE email = $1
 	`
@@ -76,6 +78,7 @@ func (r *userPostgresRepository) FindByEmail(ctx context.Context, email string) 
 		&u.Email,
 		&u.Password,
 		&u.Role,
+		&u.IsVerified,
 		&u.CreatedAt,
 		&u.UpdatedAt,
 	)
@@ -97,7 +100,7 @@ func (r *userPostgresRepository) FindAll(ctx context.Context, limit, offset int)
 	}
 
 	query := `
-		SELECT id, name, email, password, role, created_at, updated_at
+		SELECT id, name, email, password, role, is_verified, created_at, updated_at
 		FROM users
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
@@ -117,6 +120,7 @@ func (r *userPostgresRepository) FindAll(ctx context.Context, limit, offset int)
 			&u.Email,
 			&u.Password,
 			&u.Role,
+			&u.IsVerified,
 			&u.CreatedAt,
 			&u.UpdatedAt,
 		); err != nil {
@@ -135,14 +139,15 @@ func (r *userPostgresRepository) FindAll(ctx context.Context, limit, offset int)
 func (r *userPostgresRepository) Update(ctx context.Context, u *domain.User) error {
 	query := `
 		UPDATE users
-		SET name = $1, email = $2, password = $3, role = $4, updated_at = $5
-		WHERE id = $6
+		SET name = $1, email = $2, password = $3, role = $4, is_verified = $5, updated_at = $6
+		WHERE id = $7
 	`
 	_, err := r.db.ExecContext(ctx, query,
 		u.Name,
 		u.Email,
 		u.Password,
 		u.Role,
+		u.IsVerified,
 		u.UpdatedAt,
 		u.ID,
 	)
@@ -151,6 +156,12 @@ func (r *userPostgresRepository) Update(ctx context.Context, u *domain.User) err
 
 func (r *userPostgresRepository) Delete(ctx context.Context, id string) error {
 	query := `DELETE FROM users WHERE id = $1`
+	_, err := r.db.ExecContext(ctx, query, id)
+	return err
+}
+
+func (r *userPostgresRepository) SetVerified(ctx context.Context, id string) error {
+	query := `UPDATE users SET is_verified = TRUE, updated_at = NOW() WHERE id = $1`
 	_, err := r.db.ExecContext(ctx, query, id)
 	return err
 }
