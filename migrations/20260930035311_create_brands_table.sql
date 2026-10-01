@@ -14,4 +14,5 @@ CREATE TABLE IF NOT EXISTS brands(
 CREATE INDEX IF NOT EXISTS idx_brands_slug on brands(slug);
 
 -- +goose Down
+DROP INDEX IF EXISTS idx_brands_slug;
 DROP TABLE IF EXISTS brands;
