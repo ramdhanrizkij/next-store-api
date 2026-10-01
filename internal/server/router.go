@@ -1,17 +1,20 @@
 package server
 
 import (
+	"log"
+
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
 	"github.com/ramdhanrizkij/next-store-api/internal/config"
 	"github.com/ramdhanrizkij/next-store-api/internal/middleware"
-	authApp "github.com/ramdhanrizkij/next-store-api/internal/modules/auth/application"
-	authHttp "github.com/ramdhanrizkij/next-store-api/internal/modules/auth/delivery/http"
-	authInfra "github.com/ramdhanrizkij/next-store-api/internal/modules/auth/infrastructure"
+	catalogApp "github.com/ramdhanrizkij/next-store-api/internal/modules/catalog/application"
+	catalogHttp "github.com/ramdhanrizkij/next-store-api/internal/modules/catalog/delivery/http"
+	catalogInfra "github.com/ramdhanrizkij/next-store-api/internal/modules/catalog/infrastructure"
 	healthHttp "github.com/ramdhanrizkij/next-store-api/internal/modules/health/delivery/http"
-	userApp "github.com/ramdhanrizkij/next-store-api/internal/modules/user/application"
-	userHttp "github.com/ramdhanrizkij/next-store-api/internal/modules/user/delivery/http"
-	userInfra "github.com/ramdhanrizkij/next-store-api/internal/modules/user/infrastructure"
+	identityApp "github.com/ramdhanrizkij/next-store-api/internal/modules/identity/application"
+	identityHttp "github.com/ramdhanrizkij/next-store-api/internal/modules/identity/delivery/http"
+	identityInfra "github.com/ramdhanrizkij/next-store-api/internal/modules/identity/infrastructure"
+	"github.com/ramdhanrizkij/next-store-api/internal/shared/storage"
 	"github.com/ramdhanrizkij/next-store-api/internal/worker"
 	"gorm.io/gorm"
 )
@@ -33,12 +36,18 @@ func NewRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	r.GET("/health", healthHandler.HealthCheck)
 	r.GET("/ping", healthHandler.Ping)
 
+	// Object Storage Service (MinIO)
+	storageService, err := storage.NewMinioStorageService(cfg.Minio)
+	if err != nil {
+		log.Printf("[WARN] Failed to initialize MinIO storage: %v", err)
+	}
+
 	// API v1 group
 	v1 := r.Group("/api/v1")
 	{
-		// Dependencies initialization
-		userRepo := userInfra.NewUserPostgresRepository(db)
-		authRepo := authInfra.NewAuthPostgresRepository(db)
+		// Dependencies initialization (Identity Domain)
+		userRepo := identityInfra.NewUserPostgresRepository(db)
+		authRepo := identityInfra.NewAuthPostgresRepository(db)
 
 		// Queue / Worker Task Distributor
 		redisOpt := asynq.RedisClientOpt{
@@ -48,8 +57,8 @@ func NewRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 		}
 		taskDistributor := worker.NewRedisTaskDistributor(redisOpt)
 
-		userService := userApp.NewUserService(userRepo)
-		authService := authApp.NewAuthService(
+		userService := identityApp.NewUserService(userRepo)
+		authService := identityApp.NewAuthService(
 			userRepo,
 			authRepo,
 			taskDistributor,
@@ -58,14 +67,21 @@ func NewRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 			cfg.JWT.ExpirationHours,
 		)
 
-		userHandler := userHttp.NewUserHandler(userService)
-		authHandler := authHttp.NewAuthHandler(authService)
+		userHandler := identityHttp.NewUserHandler(userService)
+		authHandler := identityHttp.NewAuthHandler(authService)
 
 		authMiddleware := middleware.Auth(cfg.JWT.Secret)
 
-		// Module Routes
-		authHttp.RegisterRoutes(v1, authHandler)
-		userHttp.RegisterRoutes(v1, userHandler, authMiddleware)
+		// Register Identity domain routes
+		identityHttp.RegisterRoutes(v1, authHandler, userHandler, authMiddleware)
+
+		// Dependencies initialization (Catalog Domain)
+		brandRepo := catalogInfra.NewBrandPostgresRepository(db)
+		brandService := catalogApp.NewBrandService(brandRepo, storageService)
+		brandHandler := catalogHttp.NewBrandHandler(brandService)
+
+		// Register Catalog domain routes
+		catalogHttp.RegisterRoutes(v1, brandHandler, authMiddleware)
 	}
 
 	return r

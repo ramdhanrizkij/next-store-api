@@ -36,7 +36,7 @@ A high-performance backend RESTful API built with **Go (Golang)** using a **Feat
 
 ## 🚀 Key Features
 
-- **Feature-Modular Clean Architecture**: Domain features (`auth`, `user`, `health`) are strictly segregated into feature modules, each divided into `domain`, `application`, `infrastructure`, and `delivery` layers.
+- **Domain-Modular Clean Architecture**: Business domains (`identity`, `health`, etc.) are organized into Bounded Contexts, each divided into `domain`, `application`, `infrastructure`, and `delivery` layers.
 - **Asynchronous Background Worker (Asynq & Redis)**: Distributed, reliable background task processing with Redis-backed queue persistence for reliable asynchronous tasks like transactional email sending.
 - **Email Verification Flow**: New user accounts are registered in an unverified state (`is_verified = false`). An activation email with a secure token is enqueued to the background worker. Only verified accounts are permitted to authenticate.
 - **Database Migrations with Goose**: Declarative SQL migrations with versioning, rollback support (`-- +goose Up` / `-- +goose Down`), and status inspection.
@@ -104,18 +104,12 @@ my-project/
 │   │   ├── validator/                  # Request binding error formatter
 │   │   └── errors/                     # AppError types with HTTP status mappings
 │   │
-│   └── modules/                        # Feature-modular domain components
-│       ├── auth/                       # Authentication feature module
-│       │   ├── domain/                 # Auth entities & repository interface
-│       │   ├── application/            # Auth DTOs & business logic (Service)
-│       │   ├── infrastructure/         # PostgreSQL session repository
-│       │   └── delivery/http/          # HTTP handlers & route definitions
-│       │
-│       ├── user/                       # User management feature module
-│       │   ├── domain/                 # User entity & UserRepository interface
-│       │   ├── application/            # User DTOs & UserService
-│       │   ├── infrastructure/         # PostgreSQL UserRepository implementation
-│       │   └── delivery/http/          # HTTP handlers & route definitions
+│   └── modules/                        # Domain-modular Bounded Context components
+│       ├── identity/                   # IAM & Identity Management domain
+│       │   ├── domain/                 # User, Role, Token entities & repository interfaces
+│       │   ├── application/            # DTOs, AuthService & UserService
+│       │   ├── infrastructure/         # PostgreSQL user & session repository implementations
+│       │   └── delivery/http/          # HTTP handlers (auth, user) & route definitions
 │       │
 │       └── health/                     # Health & Readiness check module
 │           └── delivery/http/          # Health HTTP handler

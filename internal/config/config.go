@@ -43,11 +43,21 @@ func (r *RedisConfig) Addr() string {
 	return fmt.Sprintf("%s:%s", r.Host, r.Port)
 }
 
+type MinioConfig struct {
+	Endpoint  string
+	AccessKey string
+	SecretKey string
+	UseSSL    bool
+	Bucket    string
+	PublicURL string
+}
+
 type Config struct {
 	App   AppConfig
 	DB    DBConfig
 	JWT   JWTConfig
 	Redis RedisConfig
+	Minio MinioConfig
 }
 
 func (d *DBConfig) DSN() string {
@@ -89,6 +99,14 @@ func Load() (*Config, error) {
 			Password: getEnv("REDIS_PASSWORD", ""),
 			DB:       getEnvAsInt("REDIS_DB", 0),
 		},
+		Minio: MinioConfig{
+			Endpoint:  getEnv("MINIO_ENDPOINT", "localhost:9000"),
+			AccessKey: getEnv("MINIO_ACCESS_KEY", "minioadmin"),
+			SecretKey: getEnv("MINIO_SECRET_KEY", "minioadmin"),
+			UseSSL:    getEnvAsBool("MINIO_USE_SSL", false),
+			Bucket:    getEnv("MINIO_BUCKET", "nextstore"),
+			PublicURL: getEnv("MINIO_PUBLIC_URL", "http://localhost:9000/nextstore"),
+		},
 	}
 
 	return cfg, nil
@@ -107,6 +125,18 @@ func getEnvAsInt(key string, defaultVal int) int {
 		return defaultVal
 	}
 	val, err := strconv.Atoi(valStr)
+	if err != nil {
+		return defaultVal
+	}
+	return val
+}
+
+func getEnvAsBool(key string, defaultVal bool) bool {
+	valStr := os.Getenv(key)
+	if valStr == "" {
+		return defaultVal
+	}
+	val, err := strconv.ParseBool(valStr)
 	if err != nil {
 		return defaultVal
 	}

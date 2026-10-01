@@ -35,7 +35,15 @@ func GetPagination(c *gin.Context) Pagination {
 		page = DefaultPage
 	}
 
-	limit, err := strconv.Atoi(c.DefaultQuery("limit", strconv.Itoa(DefaultLimit)))
+	limitStr := c.Query("pageSize")
+	if limitStr == "" {
+		limitStr = c.Query("page_size")
+	}
+	if limitStr == "" {
+		limitStr = c.DefaultQuery("limit", strconv.Itoa(DefaultLimit))
+	}
+
+	limit, err := strconv.Atoi(limitStr)
 	if err != nil || limit < 1 {
 		limit = DefaultLimit
 	}
